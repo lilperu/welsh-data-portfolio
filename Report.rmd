@@ -1,0 +1,96 @@
+---
+title: "Welsh Movielens Capstone"
+author: "LW"
+date: "2023-06-09"
+output: html_document
+---
+
+# I. INTRODUCTION
+
+This report describes the creation of a movie recommendation system using the MovieLens data set as part of the HarvardX Professional Data Science Certificate Capstone Course. In the Machine Learning Course prior to the Capstone, a small data subset (dslabs::movielens) was used to train and compare five rating prediction models. The first method assumed the same rating for all movies and users. In this model, all differences would be explained by random variation, resulting in a naive RMSE of 1.048.
+
+The other four models, using least squares, were:
+
+| Model                          | RMSE  | Improvement on Naive Model |
+|--------------------------------|-------|----------------------------|
+| movie effect                   | 0.986 | 6%                         |
+| movie+ user effect             | 0.908 | 13%                        |
+| regularized movie effect       | 0.965 | 8%                         |
+| regularized movie+ user effect | 0.881 | 16%                        |
+
+The *Movie Effect* model accounted for the fact that some movies are just generally rated higher than others. The more often a movies was rated (the more popular movies), the higher the average rating.
+
+The *Movie+ User Effect* model also accounted for user-specific variability (users who tended to rate movies substantially higher or lower than the average).
+
+The two *Regularized* models improved on their respective models by penalizing large estimates from obscure movies that were rated by very few users.
+
+For the project described in this Capstone report, a larger subset (MovieLens 10M) was used to train a new and improved machine learning algorithm.
+
+## Data Set Description
+
+Code to import and split the 10M version of the MovieLens dataset (<http://files.grouplens.org/datasets/movielens/ml-10m.zip>) was provided in the course material for this, the first of the HarvardX Capstone projects. The test set is called **final_holdout_test** and is the 10% of the Movielens 10M data. The other 90% is in the **edx** training set, which is described below.
+
+```{r}
+str(edx)
+```
+
+There are over 9 million ratings, which include 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, and 5.
+
+```{r}
+summary(edx$rating)
+```
+
+```{r}
+n_distinct(edx$movieId)
+n_distinct(edx$userId)
+```
+
+Individual users rated an average of X movies. As there are over 10,000 movies and almost 70,000 unique users, there are quite a few NAs for each userId, as seen in the sample table below.
+
+```{r}
+sample<- edx %>% select(userId, rating, title) %>% sample_n(10)
+sample %>% pivot_wider(names_from=title, values_from=rating)
+```
+
+## Project Goal
+
+The goal of this project is to create a movie recommendation system. This will be accomplished by training a machine learning algorithm using the inputs in the edx data set resulting in a Root Mean Square Error (RMSE) of less than 0.86490 on the final_holdout_test set.
+
+## Key Steps
+
+RMSE is...\
+Using the information gleaned from EDA, several prediction models were built and tested on the edx data set. The model with the lowest RMSE was chosen to validate with the final_holdout_test set.
+
+# II. METHODS
+
+## Packages Installed
+
+In addition to tidyverse and caret, the following packages were installed for data partitioning, EDA, and modeling:
+
+dplyr\
+dslabs\
+ggplot2\
+ggthemes\
+lubridate\
+readr\
+stringr\
+tidyr\
+tibble\
+tidyverse\
+knitr
+
+## Data Cleaning
+
+## Exploratory Data Analysis
+
+```{r}
+edx %>% group_by(genres) %>% summarize(n=n(), avg= mean(rating), se= sd(rating)/sqrt(n())) %>% filter(n>= 100000) %>% mutate(genres= reorder(genres, avg)) %>% ggplot(aes(x= genres, y= avg, ymin= avg- 2*se, ymax= avg+ 2*se))+ geom_point()+ geom_errorbar()+ theme(axis.text.x= element_text(angle= 90, hjust=1))
+```
+
+## Modeling Approach
+
+Since there is strong evidence of a genre effect, PCA was used to...
+
+# III. RESULTS
+
+# IV. CONCLUSION
