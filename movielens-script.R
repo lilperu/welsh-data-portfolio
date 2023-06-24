@@ -17,21 +17,11 @@ install.packages("tidyr")
 install.packages("tibble")
 install.packages("broom")
 install.packages("tidyverse")
-install.packages("tune")
 install.packages("tidymodels")
 install.packages("parsnip")
-install.packages("rpart")
-install.packages("dials") #tuning hyperparameters
 install.packages("rsample")
-randomForest
 install.packages("Metrics")
 
-library(tune)
-library(yardstick)
-library(dials)
-library(tidymodels)
-library(parsnip)
-library(rpart)
 library(learnr)
 library(caret)
 library(knitr) # markdown reports
@@ -48,7 +38,7 @@ library(broom)
 library(gridExtra) #for side-by-side charts
 library(tidyverse)
 library(rsample)
-library("Metrics")
+library(Metrics)
 
 ##################################################
 # Data Import, Training and Test data set creation
@@ -107,8 +97,10 @@ rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
 set.seed(1, sample.kind="Rounding") # if using R 3.6 or later
 test_index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
+
 edx_train <- edx[-test_index,]
 temp <- edx[test_index,]
+
 edx_test <- temp %>% # edx_test set will be 10% of edx data
   semi_join(edx_train, by = "movieId") %>% # Make sure userId and movieId in final hold-out test set are also in edx set
   semi_join(edx_train, by = "userId")
@@ -123,7 +115,9 @@ edx %>% as_tibble()
 final_holdout_test %>% as_tibble()
 glimpse(edx)
 
+###########################################
 # Describing the Response Variable "rating"
+
 summary(edx$rating) # mean, median, range
 edx %>% summarize(sdev= sd(rating), var=var(rating)) # variance and sd
 
@@ -138,8 +132,55 @@ edx %>% filter(userId==50)
 sample<- edx %>% select(userId, rating, title) %>% sample_n(10)
 sample %>% pivot_wider(names_from=title, values_from=rating)
 
+#####################
+# Feature Engineering
 
-# Describing the Explanatory Variables #
+# create separate column for release year
+edx<- edx %>% mutate(year= str_sub(title, -5,-2))
+edx$year<- as.integer(edx$year)
+edx %>% as_tibble()
+summary(edx$year)
+
+# remove year from title column
+edx$title<- str_sub(edx$title, end= -8)
+
+# create date column
+edx<- mutate(edx, date = as_datetime(timestamp))
+summary(year(edx$date))
+
+# create age column
+edx<- mutate(edx, age= year(date)- year)
+# age vs avg rating
+edx %>% group_by(age) %>% summarize(n=n(), avg= mean(rating), se= sd(rating)/sqrt(n())) %>% ggplot(aes(age, avg))+ geom_point()+ geom_smooth()
+
+# Feature Engineering on edx_train
+edx_train<- edx_train %>% mutate(year= str_sub(title, -5,-2))
+edx_train$year<- as.integer(edx_train$year)
+edx_train$title<- str_sub(edx_train$title, end= -8)
+edx_train<- mutate(edx_train, date = as_datetime(timestamp))
+edx_train<- mutate(edx_train, age= year(date)- year)
+
+# Feature Engineering on edx_test
+edx_test<- edx_test %>% mutate(year= str_sub(title, -5,-2))
+edx_test$year<- as.integer(edx_test$year)
+edx_test$title<- str_sub(edx_test$title, end= -8)
+edx_test<- mutate(edx_test, date = as_datetime(timestamp))
+edx_test<- mutate(edx_test, age= year(date)- year)
+
+glimpse(edx_train)
+glimpse(edx_test)
+
+# Feature Engineering on final_holdout_test
+final_holdout_test<- final_holdout_test %>% mutate(year= str_sub(title, -5,-2))
+final_holdout_test$year<- as.integer(final_holdout_test$year)
+final_holdout_test$title<- str_sub(final_holdout_test$title, end= -8)
+final_holdout_test<- mutate(final_holdout_test, date = as_datetime(timestamp))
+final_holdout_test<- mutate(final_holdout_test, age= year(date)- year)
+
+glimpse(final_holdout_test)
+
+#######################################
+# Describing the Explanatory Variables 
 
 # Describing movieId Variable
 # ratings per movie are right skewed
@@ -180,24 +221,6 @@ edx %>% filter(nchar(genres)<9) %>% group_by(genres) %>% count()
 # EXPLORATORY DATA ANALYSIS
 ###########################
 
-# create separate column for release year
-edx<- edx %>% mutate(year= str_sub(title, -5,-2))
-edx$year<- as.integer(edx$year)
-edx %>% as_tibble()
-summary(edx$year)
-
-# remove year from title column
-edx$title<- str_sub(edx$title, end= -8)
-
-# create date column
-edx<- mutate(edx, date = as_datetime(timestamp))
-summary(year(edx_sample$date)) # date stats
-
-# create age column
-edx<- mutate(edx, age= year(date)- year)
-# age vs avg rating
-edx %>% group_by(age) %>% summarize(n=n(), avg= mean(rating), se= sd(rating)/sqrt(n())) %>% ggplot(aes(age, avg))+ geom_point()+ geom_smooth()
-
 # average rating grouped by month
 edx %>% mutate(date = round_date(date, unit = "month")) %>%
   group_by(date) %>%
@@ -208,22 +231,12 @@ edx %>% mutate(date = round_date(date, unit = "month")) %>%
 
 # the more often a movie is rated, the higher its average rating
 edx %>% 
-  filter(year >= 1993) %>%
+  filter(year >= 1960) %>%
   group_by(movieId) %>%
-  summarize(n = n(), years = 2018 - first(year),
+  summarize(n = n(), years = 2009 - first(year),
             title = title[1],
             rating = mean(rating)) %>%
   mutate(rate = n/years) %>%
-  ggplot(aes(rate, rating)) +
-  geom_point() +
-  geom_smooth()
-
-# The more often a movie is rated, the higher its average rating
-edx_temp %>% filter(year >= 1960) %>%
-  group_by(movieId) %>%
-  summarize(n = n(), age = 2009 - first(year),
-            rating = mean(rating)) %>%
-  mutate(rate = n/age) %>%
   ggplot(aes(rate, rating)) +
   geom_point() +
   geom_smooth()
@@ -237,19 +250,6 @@ edx %>% filter(nchar(genres)<9) %>% summarize(avg_rating=mean(rating), median=me
 # relationship between single-genre movies and average rating value
 edx %>% filter(nchar(genres)<9) %>% group_by(genres) %>% summarize(n=n(), avg= mean(rating), se= sd(rating)/sqrt(n())) %>% mutate(genres= reorder(genres, avg)) %>% ggplot(aes(x= genres, y= avg, ymin= avg- 2*se, ymax= avg+ 2*se))+ geom_point()+ geom_errorbar()+ theme(axis.text.x= element_text(angle= 90, hjust=1))
 
-# Feature Engineering on edx_test
-edx_test<- edx_test %>% mutate(year= str_sub(title, -5,-2))
-edx_test$year<- as.integer(edx_test$year)
-edx_test$title<- str_sub(edx_test$title, end= -8)
-edx_test<- mutate(edx_test, date = as_datetime(timestamp))
-edx_test<- mutate(edx_test, age= year(date)- year)
-
-# Feature Engineering on final_holdout_test
-final_holdout_test<- final_holdout_test %>% mutate(year= str_sub(title, -5,-2))
-final_holdout_test$year<- as.integer(final_holdout_test$year)
-final_holdout_test$title<- str_sub(final_holdout_test$title, end= -8)
-final_holdout_test<- mutate(final_holdout_test, date = as_datetime(timestamp))
-final_holdout_test<- mutate(final_holdout_test, age= year(date)- year)
 
 ###########
 # MODELING
@@ -258,7 +258,7 @@ final_holdout_test<- mutate(final_holdout_test, age= year(date)- year)
 RMSE <- function(true_ratings, predicted_ratings){ #calculates rmse
   sqrt(mean((true_ratings - predicted_ratings)^2))}
 
-# NAIVE MODEL
+# Naive Model
 mu_hat <- mean(edx_train$rating)
 naive_rmse <- RMSE(edx_test$rating, mu_hat)
 naive_rmse
@@ -268,7 +268,7 @@ random_effect <- rep(2.5, nrow(edx_test))
 RMSE(edx_test$rating, random_effect)
 
 # add rmse to table
-train_results <- data_frame(method = "Just the average", RMSE = naive_rmse)
+train_results <- tibble(method = "Just the average", RMSE = naive_rmse)
 
 # Model Movie Effects
 mu <- mean(edx_train$rating)
@@ -281,18 +281,19 @@ user_effects <- edx_train %>%
   left_join(movie_effects, by='movieId') %>%
   group_by(userId) %>%
   summarize(b_u = mean(rating - mu - b_m))
-predict_1 <- edx_test %>% 
+predicted_1 <- edx_test %>% 
   left_join(movie_effects, by='movieId') %>%
   left_join(user_effects, by='userId') %>%
   mutate(pred = mu + b_m + b_u) %>%
   pull(pred)
-model_1_rmse <- RMSE(predict_1, edx_test$rating)
+model_1_rmse <- RMSE(predicted_1, edx_test$rating)
 train_results <- bind_rows(train_results,
                           data_frame(method="Movie + User Effects Model",  
                                      RMSE = model_1_rmse ))
-# table of RMSEs 
+
 train_results %>% knitr::kable()
 
+###############################
 # Accounting for further biases
 # Add Genres Effects
 genres_effects <- edx_train %>% 
@@ -332,7 +333,7 @@ model_2_rmse <- RMSE(umgay_preds, edx_test$rating)
 
 train_results <- bind_rows(train_results,
                           data_frame(method="UMGAY Model",  
-                                     RMSE = model_2_rmse ))
+                                     RMSE = model_2_rmse))
 train_results %>% knitr::kable()
 
 
@@ -363,8 +364,7 @@ movie_reg_avgs <- edx %>%
   summarize(b_m = sum(rating - mu)/(n()+lambda), n_i = n())
 
 # Best 10 movies after regularization
-edx %>%
-  count(movieId) %>% 
+edx %>% count(movieId) %>% 
   left_join(movie_reg_avgs, by="movieId") %>%
   left_join(movie_titles, by="movieId") %>%
   arrange(desc(b_m)) %>% 
@@ -372,19 +372,18 @@ edx %>%
   slice(1:10) %>% 
   pull(title)
 # Worst 10 movies after regularization
-edx %>%
-  dplyr::count(movieId) %>% 
+edx %>% count(movieId) %>% 
   left_join(movie_reg_avgs, by="movieId") %>%
   left_join(movie_titles, by="movieId") %>%
   arrange(b_m) %>% 
-  dplyr::select(title, b_m, n) %>% 
+  select(title, b_m, n) %>% 
   slice(1:10) %>% 
   pull(title)
 
 ####################################################################
-# Find lambda that minimizes RMSE for Regularized User + Movie Effect Model
+# Optimal Regularized User + Movie Effect Model
 lambdas <- seq(0, 10, 0.1)
-rmses <- sapply(lambdas, function(l){
+um_rmses<- sapply(lambdas, function(l){
   b_m <- edx_train %>% 
     group_by(movieId) %>%
     summarize(b_m = sum(rating - mu)/(n()+l))
@@ -392,45 +391,30 @@ rmses <- sapply(lambdas, function(l){
     left_join(b_m, by="movieId") %>%
     group_by(userId) %>%
     summarize(b_u = sum(rating - b_m - mu)/(n()+l))
-  predicted_ratings <- edx_test %>% 
-    left_join(movie_reg_avgs, by='movieId') %>%
-    mutate(pred = mu + b_m) %>%
+  predicted_3 <- edx_test %>% 
+    left_join(b_m, by='movieId') %>%
+    left_join(b_u, by='userId') %>%
+    mutate(pred = mu + b_m + b_u) %>%
     pull(pred)
-  return(RMSE(predicted_ratings, edx_test$rating))
+  return(RMSE(predicted_3, edx_test$rating))
 })
 
 # plot lambdas in the sequence vs RMSE
-qplot(lambdas, rmses)  
+qplot(lambdas, um_rmses)  
 
 # specify lambda value of smallest RMSE
-lambda <- lambdas[which.min(rmses)]
+lambda <- lambdas[which.min(um_rmses)]
 lambda
 
-# Optimize Regularization with specified lambda
-lambda <- ?
-b_m <- edx_train %>% 
-  group_by(movieId) %>%
-  summarize(b_m = sum(rating - mu)/(n()+lambda))
-b_u <- edx_train %>% 
-  left_join(b_m, by="movieId") %>%
-  group_by(userId) %>%
-  summarize(b_u = sum(rating - b_m - mu)/(n()+lambda))
-predicted_ratings <- edx_test %>% 
-  left_join(b_i, by = "movieId") %>%
-  left_join(b_u, by = "userId") %>%
-  mutate(pred = mu + b_m + b_u) %>%
-  pull(pred)
-
-model_3_rmse <- RMSE(predicted_ratings, edx_test$rating)
 train_results <- bind_rows(train_results,
                           data_frame(method="Regularized User + Movie Effect Model",  
-                                     RMSE = model_3_rmse ))
-rmse_results %>% knitr::kable()
+                                     RMSE = min(um_rmses)))
+train_results %>% knitr::kable()
 
 ######################################################################
-# Find lambda that minimizes RMSE for Regularized UMGAY Model
+# Optimal Regularized UMGAY Model
 lambdas<- seq(0, 10, 0.1)
-rmses<- sapply(lambdas, function(l){
+umgay_rmses<- sapply(lambdas, function(l){
   b_m<- edx_train %>% 
     group_by(movieId) %>%
     summarize(b_m = sum(rating - mu)/(n()+l))
@@ -456,72 +440,67 @@ rmses<- sapply(lambdas, function(l){
     left_join(b_a, by="age") %>%
     group_by(year) %>%
     summarize(b_y = sum(rating - b_m - b_u - b_g - b_a - mu)/(n()+l))
-    
-  predicted_ratings<- edx_test %>% 
-    left_join(b_i, by = "movieId") %>%
+  predicted_4<- edx_test %>% 
+    left_join(b_m, by = "movieId") %>%
     left_join(b_u, by = "userId") %>%
     left_join(b_g, by="genres") %>%
     left_join(b_a, by="age") %>%
     left_join(b_y, by="year") %>%
     mutate(pred = mu + b_m + b_u + b_g + b_a + b_y) %>%
     pull(pred)
-  return(RMSE(predicted_ratings, edx_test$rating))
+  return(RMSE(predicted_4, edx_test$rating))
 })
 
-# plot lambdas in the sequence vs RMSE
-qplot(lambdas, rmses)  
-
 # specify lambda value of smallest RMSE
-lambda <- lambdas[which.min(rmses)]
+lambda <- lambdas[which.min(umgay_rmses)]
 lambda
 
-# Optimize Regularization with specified lambda
-lambda <- ?
-b_m <- edx %>% 
-  group_by(movieId) %>%
-  summarize(b_m = sum(rating - mu)/(n()+lambda))
-b_u <- edx %>% 
-  left_join(b_m, by="movieId") %>%
-  group_by(userId) %>%
-  summarize(b_u = sum(rating - b_m - mu)/(n()+lambda))
-b_g<- edx %>% 
-  left_join(b_m, by="movieId") %>%
-  left_join(b_u, by="userId") %>%
-  group_by(genres) %>%
-  summarize(b_g = sum(rating - b_m - b_u - mu)/(n()+lambda))
-b_a<- edx %>% 
-  left_join(b_m, by="movieId") %>%
-  left_join(b_u, by="userId") %>%
-  left_join(b_g, by="genres") %>%
-  group_by(age) %>%
-  summarize(b_a = sum(rating - b_m - b_u - b_g - mu)/(n()+lambda))
-b_y<- edx %>% 
-  left_join(b_m, by="movieId") %>%
-  left_join(b_u, by="userId") %>%
-  left_join(b_g, by="genres") %>%
-  left_join(b_g, by="age") %>%
-  group_by(year) %>%
-  summarize(b_y = sum(rating - b_m - b_u - b_g - b_a - mu)/(n()+lambda))
-
-predict_4<- edx_test %>% 
-  left_join(b_m, by = "movieId") %>%
-  left_join(b_u, by = "userId") %>%
-  left_join(b_g, by = "genres") %>%
-  left_join(b_a, by = "age") %>%
-  left_join(b_y, by = "year") %>%
-  mutate(pred = mu + b_m + b_u + b_g + b_a + b_y) %>%
-  pull(pred)
-model_4<- RMSE(predict_4, edx_test$rating)
 train_results <- bind_rows(train_results,
-                          data_frame(method="Regularized UMGAY on Train",  
-                                     RMSE = model_4))
+                           data_frame(method="Regularized UMGAY on Train",  
+                                      RMSE = min(umgay_rmses)))
 train_results %>% knitr::kable()
 
 ######################################################################
+
 # Predict on Test Set
-reg_umgay_test<- RMSE(model_4, final_holdout_test$rating)
-train_results <- data_frame(method = "Reg UMGAY Model", RMSE = reg_umgay_test)
-test_results <- bind_rows(test_results,
-                          data_frame(method="Regularized UMGAY on Test",  
-                                     RMSE = reg_umgay_test))
+lambdas<- seq(0, 10, 0.1)
+final_rmses<- sapply(lambdas, function(l){
+  b_m<- edx %>% 
+    group_by(movieId) %>%
+    summarize(b_m = sum(rating - mu)/(n()+l))
+  b_u<- edx %>% 
+    left_join(b_m, by="movieId") %>%
+    group_by(userId) %>%
+    summarize(b_u = sum(rating - b_m - mu)/(n()+l))
+  b_g<- edx %>% 
+    left_join(b_m, by="movieId") %>%
+    left_join(b_u, by="userId") %>%
+    group_by(genres) %>%
+    summarize(b_g = sum(rating - b_m - b_u - mu)/(n()+l))
+  b_a<- edx %>% 
+    left_join(b_m, by="movieId") %>%
+    left_join(b_u, by="userId") %>%
+    left_join(b_g, by="genres") %>%
+    group_by(age) %>%
+    summarize(b_a = sum(rating - b_m - b_u - b_g - mu)/(n()+l))
+  b_y<- edx %>% 
+    left_join(b_m, by="movieId") %>%
+    left_join(b_u, by="userId") %>%
+    left_join(b_g, by="genres") %>%
+    left_join(b_a, by="age") %>%
+    group_by(year) %>%
+    summarize(b_y = sum(rating - b_m - b_u - b_g - b_a - mu)/(n()+l))
+  predicted_final<- final_holdout_test %>% 
+    left_join(b_m, by = "movieId") %>%
+    left_join(b_u, by = "userId") %>%
+    left_join(b_g, by="genres") %>%
+    left_join(b_a, by="age") %>%
+    left_join(b_y, by="year") %>%
+    mutate(pred = mu + b_m + b_u + b_g + b_a + b_y) %>%
+    pull(pred)
+  return(RMSE(predicted_final, final_holdout_test$rating))
+})
+
+test_results <- data_frame(method="Regularized UMGAY on Test",  
+                                     RMSE = min(final_rmses))
 test_results %>% knitr::kable()
