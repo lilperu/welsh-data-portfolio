@@ -1,45 +1,3 @@
-###########################
-# Install and load packages
-###########################
-
-install.packages("learnr")
-install.packages("caret")
-install.packages("knitr")
-install.packages("gridExtra") 
-install.packages("dplyr")
-install.packages("dslabs")
-install.packages("ggthemes") 
-install.packages("lubridate") 
-install.packages("readr") 
-install.packages("stringi") 
-install.packages("stringr") 
-install.packages("tidyr")
-install.packages("tibble")
-install.packages("broom")
-install.packages("tidyverse")
-install.packages("tidymodels")
-install.packages("parsnip")
-install.packages("rsample")
-install.packages("Metrics")
-
-library(learnr)
-library(caret)
-library(knitr) # markdown reports
-library(dplyr)
-library(dslabs)
-library(ggthemes) # plot editing
-library(lubridate) # date formatting
-library(readr) # importing data
-library(stringi) # newer version of stringr
-library(stringr) # string detection, editing
-library(tidyr)
-library(tibble)
-library(broom)
-library(gridExtra) #for side-by-side charts
-library(tidyverse)
-library(rsample)
-library(Metrics)
-
 ##################################################
 # Data Import, Training and Test data set creation
 # Code provided by HarvardX in course material
@@ -91,6 +49,40 @@ removed <- anti_join(temp, final_holdout_test) # Add rows removed from final hol
 edx <- rbind(edx, removed)
 rm(dl, ratings, movies, test_index, temp, movielens, removed)
 
+#################################
+# Install and load other packages
+#################################
+
+if(!require(broom)) install.packages("broom", repos = "http://cran.us.r-project.org")
+library(broom)
+if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+library(dplyr)
+if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+library(ggplot2)
+if(!require(gridExtra)) install.packages("gridExtra", repos = "http://cran.us.r-project.org")
+library(gridExtra)
+if(!require(knitr)) install.packages("knitr", repos = "http://cran.us.r-project.org")
+library(knitr)
+if(!require(lubridate)) install.packages("lubridate", repos = "http://cran.us.r-project.org")
+library(lubridate)
+if(!require(Metrics)) install.packages("Metrics", repos = "http://cran.us.r-project.org")
+library(Metrics)
+if(!require(readr)) install.packages("readr", repos = "http://cran.us.r-project.org")
+library(readr)
+if(!require(rmarkdown)) install.packages("rmarkdown", repos = "http://cran.us.r-project.org")
+library(rmarkdown)
+if(!require(rsample)) install.packages("rsample", repos = "http://cran.us.r-project.org")
+library(rsample)
+if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
+library(stringr)
+if(!require(tibble)) install.packages("tibble", repos = "http://cran.us.r-project.org")
+library(tibble)
+if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
+library(tidyr)
+if(!require(tinytex)) install.packages("tinytex", repos = "http://cran.us.r-project.org")
+library(tinytex)
+tinytex::install_tinytex()
+
 ######################################
 # Create train and test subsets of edx
 ######################################
@@ -116,7 +108,7 @@ final_holdout_test %>% as_tibble()
 glimpse(edx)
 
 ###########################################
-# Describing the Response Variable "rating"
+# Describing the Response Variable "Rating"
 
 summary(edx$rating) # mean, median, range
 edx %>% summarize(sdev= sd(rating), var=var(rating)) # variance and sd
@@ -132,7 +124,7 @@ edx %>% filter(userId==50)
 sample<- edx %>% select(userId, rating, title) %>% sample_n(10)
 sample %>% pivot_wider(names_from=title, values_from=rating)
 
-#####################
+######################
 # Feature Engineering
 
 # create separate column for release year
@@ -342,6 +334,27 @@ train_results %>% knitr::kable()
 ################
 
 movie_titles<- edx %>% select(movieId, title) %>% distinct()
+
+# 10 movies with the largest residuals from Movie Effects Model
+edx %>% left_join(movie_effects, by= "movieId") %>% 
+  mutate(residual=rating-(mu+ b_m)) %>% 
+  arrange(desc(abs(residual))) %>% select(title, residual) %>% slice(1:10) %>% pull(title)
+
+# Top 10 Movies
+tops<- movie_effects %>% left_join(movie_titles, by="movieId") %>%
+  arrange(desc(b_m)) %>% 
+  dplyr::select(title, b_m) %>% 
+  slice(1:10) %>%  
+  pull(title)
+kable(tops, caption="10 Best Movies")
+
+# Bottom 10 Movies
+bottom<- movie_effects %>% left_join(movie_titles, by="movieId") %>%
+  arrange(b_m) %>% 
+  dplyr::select(title, b_m) %>% 
+  slice(1:10) %>%  
+  pull(title)
+kable(bottom, caption="10 Worst Movies")
 
 # number of users that rated 10 best movies
 edx %>% count(movieId) %>% 
